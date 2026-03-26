@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'models.dart';
-import 'scanner_service.dart';
-import 'geofence_service.dart';
-import 'qr_scanner_screen.dart';
+import 'tag_service.dart';
+import 'tags_screen.dart';
+import 'patrols_screen.dart';
+import 'do_patrol_screen.dart';
+import 'geofence_setup_screen.dart';
+import 'qr_print_screen.dart';
+import 'beacon_config_screen.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  TagService().load();
   runApp(const CheckpointApp());
 }
 
@@ -33,294 +38,183 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final List<CheckpointScan> _scanHistory = [];
-  final List<String> _nfcLogs = [];
-  bool _bleScanning = false;
-  bool _nfcScanning = false;
-  bool _geofenceMonitoring = false;
-  bool _showLogs = false;
+  final _svc = TagService();
 
-  void _addLog(String msg) {
-    final time = DateFormat('HH:mm:ss.SSS').format(DateTime.now());
-    setState(() {
-      _nfcLogs.insert(0, '[$time] $msg');
-      if (_nfcLogs.length > 100) _nfcLogs.removeLast();
-    });
+  @override
+  void initState() {
+    super.initState();
+    _svc.addListener(_update);
   }
 
-  void _onCheckpointScanned(CheckpointScan scan) {
-    setState(() {
-      _scanHistory.insert(0, scan);
-    });
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              '${scan.method.name.toUpperCase()} scanned: ${scan.checkpointName ?? scan.checkpointId}'),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
+  @override
+  void dispose() {
+    _svc.removeListener(_update);
+    super.dispose();
   }
 
-  void _openQrScanner() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => QrScannerScreen(onScanned: _onCheckpointScanned),
-      ),
-    );
-  }
-
-  void _toggleBleScan() async {
-    if (_bleScanning) {
-      ScannerService.stopBleScan();
-      setState(() => _bleScanning = false);
-    } else {
-      setState(() => _bleScanning = true);
-      try {
-        await ScannerService.startBleScan(_onCheckpointScanned);
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('BLE error: $e')),
-          );
-        }
-      }
-      Future.delayed(const Duration(seconds: 16), () {
-        if (mounted) setState(() => _bleScanning = false);
-      });
-    }
-  }
-
-  void _startNfcScan() async {
-    setState(() {
-      _nfcScanning = true;
-      _showLogs = true;
-    });
-    _addLog('Starting NFC scan...');
-    try {
-      await ScannerService.startNfcScan(
-        (scan) {
-          _addLog('SUCCESS: Got checkpoint ${scan.checkpointId}');
-          _onCheckpointScanned(scan);
-          if (mounted) setState(() => _nfcScanning = false);
-        },
-        onError: (error) {
-          _addLog('ERROR: $error');
-          if (mounted) {
-            setState(() => _nfcScanning = false);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('NFC: $error'),
-                duration: const Duration(seconds: 4),
-              ),
-            );
-          }
-        },
-        onLog: _addLog,
-      );
-    } catch (e) {
-      _addLog('EXCEPTION: $e');
-      if (mounted) {
-        setState(() => _nfcScanning = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('NFC error: $e'),
-            duration: const Duration(seconds: 4),
-          ),
-        );
-      }
-    }
-  }
-
-  void _toggleGeofence() async {
-    if (_geofenceMonitoring) {
-      GeofenceService.stopMonitoring();
-      setState(() => _geofenceMonitoring = false);
-    } else {
-      setState(() => _geofenceMonitoring = true);
-      try {
-        await GeofenceService.startMonitoring(_onCheckpointScanned);
-      } catch (e) {
-        if (mounted) {
-          setState(() => _geofenceMonitoring = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Geofence error: $e')),
-          );
-        }
-      }
-    }
-  }
-
-  IconData _iconForMethod(ScanMethod method) {
-    switch (method) {
-      case ScanMethod.qr:
-        return Icons.qr_code_scanner;
-      case ScanMethod.ble:
-        return Icons.bluetooth;
-      case ScanMethod.nfc:
-        return Icons.nfc;
-      case ScanMethod.geofence:
-        return Icons.location_on;
-    }
+  void _update() {
+    if (mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Checkpoint Scanner'),
-        actions: [
-          IconButton(
-            icon: Icon(_showLogs ? Icons.list : Icons.bug_report),
-            tooltip: _showLogs ? 'Show scans' : 'Show NFC logs',
-            onPressed: () => setState(() => _showLogs = !_showLogs),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.center,
-              children: [
-                FilledButton.icon(
-                  onPressed: _openQrScanner,
-                  icon: const Icon(Icons.qr_code_scanner),
-                  label: const Text('QR'),
+      appBar: AppBar(title: const Text('Checkpoint Scanner')),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Stats
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _stat('Checkpoints', _svc.checkpoints.length, Icons.flag),
+                    _stat('Patrols', _svc.patrols.length, Icons.route),
+                    _stat('Runs', _svc.history.length, Icons.history),
+                  ],
                 ),
-                FilledButton.icon(
-                  onPressed: _toggleBleScan,
-                  icon: Icon(
-                      _bleScanning ? Icons.bluetooth_searching : Icons.bluetooth),
-                  label: Text(_bleScanning ? 'Stop BLE' : 'BLE'),
-                  style: _bleScanning
-                      ? FilledButton.styleFrom(backgroundColor: Colors.red)
-                      : null,
-                ),
-                FilledButton.icon(
-                  onPressed: _nfcScanning ? null : _startNfcScan,
-                  icon: const Icon(Icons.nfc),
-                  label: Text(_nfcScanning ? 'Waiting...' : 'NFC'),
-                ),
-                FilledButton.icon(
-                  onPressed: _toggleGeofence,
-                  icon: Icon(_geofenceMonitoring
-                      ? Icons.location_off
-                      : Icons.location_on),
-                  label: Text(_geofenceMonitoring ? 'Stop Geo' : 'Geofence'),
-                  style: _geofenceMonitoring
-                      ? FilledButton.styleFrom(backgroundColor: Colors.green)
-                      : null,
-                ),
-              ],
-            ),
-          ),
-          if (_bleScanning)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 8.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2)),
-                  SizedBox(width: 8),
-                  Text('Scanning for BLE beacons...'),
-                ],
               ),
             ),
-          const Divider(),
-          if (_showLogs) ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Row(
+            const SizedBox(height: 20),
+
+            // Main actions
+            _btn(Icons.flag, 'Checkpoints', 'BLE, NFC, QR, Geofence',
+                Colors.blue, const TagsScreen()),
+            const SizedBox(height: 10),
+            _btn(Icons.route, 'Patrols', 'Create routes & run them',
+                Colors.teal, const PatrolsScreen()),
+            const SizedBox(height: 10),
+            _btn(Icons.add_location_alt, 'Geofence Zones',
+                'DAWA address + Google Maps', Colors.orange,
+                const GeofenceSetupScreen()),
+            const SizedBox(height: 10),
+            _btn(Icons.qr_code, 'Print QR Codes', 'View & export PDF',
+                Colors.purple, const QrPrintScreen()),
+            const SizedBox(height: 10),
+            _btn(Icons.settings_bluetooth, 'Beacon Config',
+                'Connect & configure KKM/Eddystone beacon',
+                Colors.deepPurple,
+                const BeaconConfigScreen(targetMac: 'DD:34:02:C6:C4:45')),
+            const SizedBox(height: 20),
+
+            // Quick start patrol
+            if (_svc.patrols.isNotEmpty) ...[
+              const Text('Quick Start',
+                  style:
+                      TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              ..._svc.patrols.map((p) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: SizedBox(
+                      height: 48,
+                      child: FilledButton.icon(
+                        onPressed: () =>
+                            _push(DoPatrolScreen(patrol: p)),
+                        icon: const Icon(Icons.play_arrow),
+                        label: Text(
+                            '${p.name} (${p.checkpointIds.length} checkpoints)'),
+                        style: FilledButton.styleFrom(
+                            backgroundColor: Colors.green),
+                      ),
+                    ),
+                  )),
+            ],
+
+            // History
+            if (_svc.history.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Row(
                 children: [
-                  Text('NFC Debug Log (${_nfcLogs.length})',
-                      style: Theme.of(context).textTheme.titleMedium),
+                  const Text('Recent Runs',
+                      style: TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.bold)),
                   const Spacer(),
-                  if (_nfcLogs.isNotEmpty)
-                    TextButton(
-                      onPressed: () => setState(() => _nfcLogs.clear()),
-                      child: const Text('Clear'),
-                    ),
+                  TextButton(
+                      onPressed: _svc.clearHistory,
+                      child: const Text('Clear')),
                 ],
               ),
-            ),
-            Expanded(
-              child: _nfcLogs.isEmpty
-                  ? const Center(child: Text('No logs yet. Tap NFC to start.'))
-                  : ListView.builder(
-                      itemCount: _nfcLogs.length,
-                      itemBuilder: (context, index) {
-                        final log = _nfcLogs[index];
-                        final isError = log.contains('ERROR') ||
-                            log.contains('EXCEPTION');
-                        final isSuccess = log.contains('SUCCESS');
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16.0, vertical: 2.0),
-                          child: Text(
-                            log,
-                            style: TextStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 11,
-                              color: isError
-                                  ? Colors.red
-                                  : isSuccess
-                                      ? Colors.green
-                                      : null,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-            ),
-          ] else ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Row(
-                children: [
-                  Text('Scan History (${_scanHistory.length})',
-                      style: Theme.of(context).textTheme.titleMedium),
-                  const Spacer(),
-                  if (_scanHistory.isNotEmpty)
-                    TextButton(
-                      onPressed: () => setState(() => _scanHistory.clear()),
-                      child: const Text('Clear'),
-                    ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: _scanHistory.isEmpty
-                  ? const Center(
-                      child: Text('No scans yet.\nTap a button above to start.',
-                          textAlign: TextAlign.center))
-                  : ListView.builder(
-                      itemCount: _scanHistory.length,
-                      itemBuilder: (context, index) {
-                        final scan = _scanHistory[index];
-                        final timeStr =
-                            DateFormat('HH:mm:ss').format(scan.timestamp);
-                        return ListTile(
-                          leading:
-                              Icon(_iconForMethod(scan.method), size: 32),
-                          title: Text(
-                              scan.checkpointName ?? scan.checkpointId),
-                          subtitle: Text(
-                              '${scan.method.name.toUpperCase()} • ${scan.checkpointId} • $timeStr'),
-                        );
-                      },
-                    ),
-            ),
+              ..._svc.history.take(5).map((run) {
+                final time =
+                    DateFormat('MM/dd HH:mm').format(run.startedAt);
+                final ok = run.completedAt != null;
+                return ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                      ok ? Icons.check_circle : Icons.cancel,
+                      color: ok ? Colors.green : Colors.orange,
+                      size: 20),
+                  title: Text(run.patrolName,
+                      style: const TextStyle(fontSize: 13)),
+                  subtitle: Text(
+                      '$time  •  ${run.scans.length} scanned',
+                      style: const TextStyle(fontSize: 11)),
+                );
+              }),
+            ],
           ],
-        ],
+        ),
       ),
     );
+  }
+
+  Widget _stat(String label, int count, IconData icon) {
+    return Column(
+      children: [
+        Icon(icon, size: 28, color: Colors.blue),
+        const SizedBox(height: 4),
+        Text('$count',
+            style:
+                const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+        Text(label,
+            style: const TextStyle(fontSize: 12, color: Colors.grey)),
+      ],
+    );
+  }
+
+  Widget _btn(IconData icon, String label, String sub, Color color,
+      Widget screen) {
+    return SizedBox(
+      height: 60,
+      child: FilledButton(
+        onPressed: () => _push(screen),
+        style: FilledButton.styleFrom(
+          backgroundColor: color,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 26),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(label,
+                    style: const TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.bold)),
+                Text(sub,
+                    style: const TextStyle(
+                        fontSize: 10, color: Colors.white70)),
+              ],
+            ),
+            const Spacer(),
+            const Icon(Icons.chevron_right),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _push(Widget screen) {
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => screen))
+        .then((_) => setState(() {}));
   }
 }

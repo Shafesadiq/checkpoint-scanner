@@ -3,18 +3,24 @@
 <plist version="1.0">
 <dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Location is used for geofence checkpoint detection.</string>
+	<string>Location is required for Bluetooth beacon scanning.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Location is used for geofence checkpoint detection.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Camera is used to scan QR code checkpoints.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Bluetooth is used to detect BLE beacon checkpoints.</string>
+	<string>This app uses Bluetooth to detect patrol checkpoint beacons.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>This app connects to beacons to configure patrol checkpoints.</string>
 	<key>NFCReaderUsageDescription</key>
 	<string>NFC is used to scan checkpoint tags.</string>
 	<key>com.apple.developer.nfc.readersession.iso7816.select-identifiers</key>
 	<array>
 		<string>D276000085010100</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>bluetooth-central</string>
 	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
